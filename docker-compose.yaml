@@ -294,5 +294,15 @@ services:
       airflow-init:
         condition: service_completed_successfully
 
+  clickhouse:
+    container_name: clickhouse-server
+    image: clickhouse/clickhouse-server
+    volumes:
+      - ./data_dir:/var/lib/clickhouse
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    ports:
+      - "9000:9000"
+      - "8123:8123"
+
 volumes:
   postgres-db-volume:

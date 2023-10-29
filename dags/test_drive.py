@@ -1,3 +1,4 @@
+import logging
 import os
 
 import polars as pl
@@ -30,12 +31,17 @@ with DAG(
             .filter(pl.col('mcc').is_in([262, 460, 310, 208, 510, 404, 250, 724, 234, 311])) \
             .collect()
 
+        paths_list = []
+
         for i, chunk_start in enumerate(range(0, len(df), chunk_size)):
             chunk_end = chunk_start + chunk_size
             chunk = df[chunk_start:chunk_end]
 
             output_file_path = f"/tmp/batches/batch_{i + 1}.csv"
             chunk.write_csv(output_file_path, has_header=False)
+            logging.info(f"Batch {i + 1} saved into: {output_file_path}")
+            paths_list.append([output_file_path])
+        return paths_list
 
 
     transform = PythonOperator(

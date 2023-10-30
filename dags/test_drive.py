@@ -1,5 +1,7 @@
+import csv
 import logging
 import os
+from datetime import datetime
 
 import polars as pl
 
@@ -7,6 +9,7 @@ from airflow import DAG
 from airflow.operators.bash import BashOperator
 from airflow.operators.python import PythonOperator
 from airflow.utils.dates import days_ago
+from airflow_clickhouse_plugin.hooks.clickhouse import ClickHouseHook
 
 default_args = {
     'start_date': days_ago(1),
@@ -49,4 +52,37 @@ with DAG(
         python_callable=process_data
     )
 
-    extract
+    def load_csv_to_clickhouse(fp):
+        schema = {
+            'radio': str,
+            'mcc': int,
+            'net': int,
+            'area': int,
+            'cell': int,
+            'unit': int,
+            'lon': float,
+            'lat': float,
+            'range': int,
+            'samples': int,
+            'changeable': int,
+            'created': lambda x: datetime.strptime(x, '%Y-%m-%d %H:%M:%S'),
+            'updated': lambda x: datetime.strptime(x, '%Y-%m-%d %H:%M:%S'),
+            'averageSignal': int
+        }
+        bypass = lambda x: x
+
+        cl_hook = ClickHouseHook(clickhouse_conn_id="clickhouse")
+
+        fieldnames = ['radio', 'mcc', 'net', 'area', 'cell', 'unit', 'lon',
+                      'lat', 'range', 'samples', 'changeable', 'created', 'updated', 'averageSignal']
+        with open(fp) as f:
+            gen = ({k: schema.get(k, bypass)(v) for k, v in row.items()} for row in
+                   csv.DictReader(f, fieldnames=fieldnames))
+            cl_hook.execute("insert into cell_towers values", gen)
+
+    load = PythonOperator.partial(
+        task_id="load-to-clickhouse",
+        python_callable=load_csv_to_clickhouse
+    ).expand(op_args=transform.output)
+
+    extract >> transform >> load
